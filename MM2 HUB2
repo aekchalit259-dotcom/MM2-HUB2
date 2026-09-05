@@ -1,0 +1,189 @@
+-- ========================================================
+-- MM2 ULTIMATE SCRIPT (THAILAND EDITION)
+-- DEVELOPED FOR: AEK
+-- TARGET GAME: Murder Mystery 2 (MM2)
+-- ========================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ค่ากำหนดพื้นฐาน (Settings Configuration)
+local Settings = {
+    -- ฟังก์ชัน 1: เคลื่อนไหว
+    WalkSpeed = 50,
+    JumpPower = 100,
+    Invisibility = false,
+    
+    -- ฟังก์ชัน 2: ระบบอัตโนมัติ
+    AutoKill = false,      -- เฉพาะ Murder
+    AutoShoot = false,     -- เฉพาะ Sheriff
+    HitboxSize = 15,       -- ขนาดขยายการโจมตี
+    
+    -- ฟังก์ชัน 3: ESP
+    ESP_Enabled = true
+}
+
+-- ระบบตรวจจับบทบาท (Role Detection System)
+local function GetPlayerRole(player)
+    if not player or not player.Character then return "Innocent" end
+    
+    -- ตรวจสอบจากอาวุธในตัวและ Backpack
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    
+    if (backpack and backpack:FindFirstChild("Knife")) or (character and character:FindFirstChild("Knife")) then
+        return "Murder"
+    elseif (backpack and backpack:FindFirstChild("Gun")) or (character and character:FindFirstChild("Gun")) then
+        return "Sheriff"
+    end
+    
+    return "Innocent"
+end
+
+-- ========================================================
+-- ฟังก์ชัน 1: การเคลื่อนไหว (Movement Functions)
+-- ========================================================
+
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        local humanoid = LocalPlayer.Character.Humanoid
+        humanoid.WalkSpeed = Settings.WalkSpeed
+        humanoid.JumpPower = Settings.JumpPower
+        
+        -- ระบบล่องหน (Invisibility)
+        if Settings.Invisibility then
+            for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.Transparency = 1
+                end
+            end
+        end
+    end
+end)
+
+-- ========================================================
+-- ฟังก์ชัน 2: ระบบระบบอัตโนมัติ และ Hitbox (Auto & Hitbox Functions)
+-- ========================================================
+
+-- ระบบขยาย Hitbox (ทั้ง 2 บทบาท)
+RunService.RenderStepped:Connect(function()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            hrp.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+            hrp.Transparency = 0.7
+            hrp.CanCollide = false
+        end
+    end
+end)
+
+-- ระบบ Auto Kill (เมื่อเป็น Murder) และ Auto Shoot (เมื่อเป็น Sheriff)
+RunService.Heartbeat:Connect(function()
+    local myRole = GetPlayerRole(LocalPlayer)
+    local myCharacter = LocalPlayer.Character
+    if not myCharacter or not myCharacter:FindFirstChild("HumanoidRootPart") then return end
+    
+    -- Auto Kill สำหรับ Murder
+    if Settings.AutoKill and myRole == "Murder" then
+        local knife = myCharacter:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
+        if knife then
+            knife.Parent = myCharacter -- ถือมีดอัตโนมัติ
+            for _, target in pairs(Players:GetPlayers()) do
+                if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                    local targetHRP = target.Character.HumanoidRootPart
+                    -- วาร์ปไปสังหารเป้าหมายในระยะประชิด
+                    myCharacter.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 2)
+                    knife:Activate()
+                end
+            end
+        end
+    end
+    
+    -- Auto Shoot สำหรับ Sheriff (ยิงโค้งคำนวณทิศทางอัตโนมัติ)
+    if Settings.AutoShoot and myRole == "Sheriff" then
+        local gun = myCharacter:FindFirstChild("Gun") or LocalPlayer.Backpack:FindFirstChild("Gun")
+        if gun then
+            gun.Parent = myCharacter -- ถือปืนอัตโนมัติ
+            
+            -- ค้นหา Murder
+            for _, target in pairs(Players:GetPlayers()) do
+                if target ~= LocalPlayer and GetPlayerRole(target) == "Murder" then
+                    if target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetHRP = target.Character.HumanoidRootPart
+                        
+                        -- คำนวณวิถีกระสุนโค้ง (Homing/Curved Bullet Execution)
+                        local shootPos = targetHRP.Position
+                        
+                        -- ส่งคำสั่งยิงไปยังตำแหน่งของ Murder
+                        local remote = gun:FindFirstChild("Shoot") or game:GetService("ReplicatedStorage"):FindFirstChild("Shoot")
+                        if remote and remote:IsA("RemoteEvent") then
+                            remote:FireServer(shootPos)
+                        else
+                            gun:Activate()
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ========================================================
+-- ฟังก์ชัน 3: ระบบ ESP แสดงสถานะภาษาไทย (Thai ESP System)
+-- ========================================================
+
+local function CreateESP(player)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Thai"
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Parent = billboard
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.SourceSansBold
+    
+    return billboard, textLabel
+end
+
+RunService.RenderStepped:Connect(function()
+    if not Settings.ESP_Enabled then return end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local esp = head:FindFirstChild("ESP_Thai")
+            
+            if not esp then
+                local newEsp, label = CreateESP(player)
+                newEsp.Parent = head
+                esp = newEsp
+            end
+            
+            local label = esp:FindFirstChildOfClass("TextLabel")
+            local role = GetPlayerRole(player)
+            
+            -- แสดงผลตามเงื่อนไขบทบาท
+            if role == "Murder" then
+                label.Text = player.Name .. "\n[ไอเลว ไอชั่ว]"
+                label.TextColor3 = Color3.fromRGB(255, 0, 0) -- สีแดง
+            elseif role == "Sheriff" then
+                label.Text = player.Name .. "\n[ฮีโร่ นกโดโด้]"
+                label.TextColor3 = Color3.fromRGB(0, 170, 255) -- สีฟ้า
+            else
+                label.Text = player.Name .. "\n[คนดี ศรีสังคม]"
+                label.TextColor3 = Color3.fromRGB(0, 255, 0) -- สีเขียว
+            end
+        end
+    end
+end)
+
+-- สั่งเปิดใช้งานคุณสมบัติอัตโนมัติ
+Settings.AutoKill = true
+Settings.AutoShoot = true
